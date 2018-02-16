@@ -17,10 +17,10 @@ func main() {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", Index).Methods("GET")
-	router.HandleFunc("/store", PersonStore).Methods("POST")
-	router.HandleFunc("/update/{id}", PersonUpdate).Methods("PUT")
-	router.HandleFunc("/destroy/{id}", PersonDelete).Methods("DELETE")
-	router.HandleFunc("/show/{id}", PersonShow).Methods("GET")
+	router.HandleFunc("/store", SavePerson).Methods("POST")
+	router.HandleFunc("/update/{id}", UpdatePerson).Methods("PUT")
+	router.HandleFunc("/destroy/{id}", DeletePerson).Methods("DELETE")
+	router.HandleFunc("/show/{id}", ShowPerson).Methods("GET")
 
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -40,8 +40,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintln(w, "SPARK!\n")
 
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:3306)/spark")
-	checkErr(err)
+	db := dbconn()
 
 	rows, err := db.Query("SELECT * FROM person")
 	checkErr(err)
@@ -62,15 +61,14 @@ func Index(w http.ResponseWriter, r *http.Request) {
 }
 
 // PersonStore STORE
-func PersonStore(w http.ResponseWriter, r *http.Request) {
+func SavePerson(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	var p Person
 	err := decoder.Decode(&p)
 	checkErr(err)
 	defer r.Body.Close()
 
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:3306)/spark")
-	checkErr(err)
+	db := dbconn()
 
 	stmt, err := db.Prepare("INSERT INTO person(firstname, lastname, email, phonenumber, birth) VALUES(?,?,?,?,?)")
 	checkErr(err)
@@ -87,7 +85,7 @@ func PersonStore(w http.ResponseWriter, r *http.Request) {
 }
 
 // PersonUpdate UPDATE
-func PersonUpdate(w http.ResponseWriter, r *http.Request) {
+func UpdatePerson(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	var p Person
 	err := decoder.Decode(&p)
@@ -95,8 +93,7 @@ func PersonUpdate(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	vars := mux.Vars(r)
 
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:3306)/spark")
-	checkErr(err)
+	db := dbconn()
 
 	stmt, err := db.Prepare("UPDATE person SET firstname=?, lastname=?, email=?, phonenumber=?, birth=? WHERE id=?")
 	checkErr(err)
@@ -111,15 +108,14 @@ func PersonUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 // PersonShow SHOW
-func PersonShow(w http.ResponseWriter, r *http.Request) {
+func ShowPerson(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
 
 	var person Person
 
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:3306)/spark")
-	checkErr(err)
+	db := dbconn()
 
 	rows, err := db.Query("SELECT * FROM person WHERE id=" + vars["id"])
 	checkErr(err)
@@ -134,11 +130,10 @@ func PersonShow(w http.ResponseWriter, r *http.Request) {
 }
 
 // PersonDelete DESTROY
-func PersonDelete(w http.ResponseWriter, r *http.Request) {
+func DeletePerson(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:3306)/spark")
-	checkErr(err)
+	db := dbconn()
 
 	stmt, err := db.Prepare("DELETE FROM person WHERE id=?")
 	checkErr(err)
@@ -153,6 +148,12 @@ func PersonDelete(w http.ResponseWriter, r *http.Request) {
 
 	db.Close()
 
+}
+
+func dbconn() *sql.DB {
+	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:3306)/spark")
+	checkErr(err)
+	return db
 }
 
 func checkErr(err error) {
