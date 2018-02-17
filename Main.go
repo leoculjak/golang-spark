@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 
 	"github.com/gorilla/mux"
 
@@ -38,7 +39,7 @@ type Person struct {
 // Index Index page
 func Index(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintln(w, "SPARK!\n")
+	fmt.Fprintln(w, "SPARK!")
 
 	db := dbconn()
 
@@ -60,13 +61,19 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	db.Close()
 }
 
-// PersonStore STORE
+// SavePerson STORE
 func SavePerson(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	var p Person
 	err := decoder.Decode(&p)
 	checkErr(err)
 	defer r.Body.Close()
+
+	check1, check2 := checkAttributes(p.Email, p.Birth, p.Phonenumber)
+	if check2 == false {
+		w.Write(check1)
+		return
+	}
 
 	db := dbconn()
 
@@ -84,7 +91,7 @@ func SavePerson(w http.ResponseWriter, r *http.Request) {
 	db.Close()
 }
 
-// PersonUpdate UPDATE
+// UpdatePerson UPDATE
 func UpdatePerson(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	var p Person
@@ -107,7 +114,7 @@ func UpdatePerson(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(affect)
 }
 
-// PersonShow SHOW
+// ShowPerson SHOW
 func ShowPerson(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -125,11 +132,16 @@ func ShowPerson(w http.ResponseWriter, r *http.Request) {
 		checkErr(err)
 	}
 
-	j, _ := json.Marshal(person)
-	w.Write(j)
+	if person.Id == 0 {
+		w.Write(jsonNoUser())
+	} else {
+		checkAttributes(person.Email, person.Birth, person.Phonenumber)
+		j, _ := json.Marshal(person)
+		w.Write(j)
+	}
 }
 
-// PersonDelete DESTROY
+// DeletePerson DESTROY
 func DeletePerson(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
@@ -150,6 +162,7 @@ func DeletePerson(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// dbconn Connect to database
 func dbconn() *sql.DB {
 	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:3306)/spark")
 	checkErr(err)
@@ -159,5 +172,28 @@ func dbconn() *sql.DB {
 func checkErr(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func jsonNoUser() []byte {
+	preerr := map[string]string{"Error": "Korisnik ne postoji u bazi"}
+	myerr, _ := json.Marshal(preerr)
+	return myerr
+}
+
+func checkAttributes(m, d, p string) ([]byte, bool) {
+	mail := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+	date := regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
+	phone := regexp.MustCompile(`^(?:(?:\(?(?:00|\+)([1-4]\d\d|[1-9]\d?)\)?)?[\-\.\ \\\/]?)?((?:\(?\d{1,}\)?[\-\.\ \\\/]?){0,})(?:[\-\.\ \\\/]?(?:#|ext\.?|extension|x)[\-\.\ \\\/]?(\d+))?$`)
+
+	er := false
+	var errors []byte
+
+	if mail.MatchString(m) == true && date.MatchString(d) == true && phone.MatchString(p) == true {
+		return errors, true
+	} else {
+		errors := map[string]bool{"Email": mail.MatchString(m), "Birth": date.MatchString(d), "PhoneNumber": phone.MatchString(p)}
+		jsonerrors, _ := json.Marshal(errors)
+		return jsonerrors, er
 	}
 }
